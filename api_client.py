@@ -385,32 +385,37 @@ def Index_to_capnp(obj: Index) -> IndexProtocol[T]:
 
 
 class CVSE_Client:
-    def __init__(self, host, port, connection, client, cvse):
+    def __init__(self, host, port, connection, client, cvse, auth_key=None):
         self.host = host
         self.port = port
         self.connection = connection
         self.client = client
         self.cvse = cvse
-        if os.path.exists(auth_key_path):
+        if auth_key:
+            self.auth_key = auth_key
+        elif os.path.exists(auth_key_path):
             with open(auth_key_path, "r") as f:
                 self.auth_key = f.read().strip()
         else:
             self.auth_key = None
 
     @staticmethod
-    async def create(host, port) -> "CVSE_Client":
+    async def create(host, port, auth_key=None) -> "CVSE_Client":
         # connection = await capnp.AsyncIoStream.create_connection(host=host, port=port)
         # sock = connection.transport.get_extra_info("socket")
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         await asyncio.get_event_loop().sock_connect(sock, (host, int(port)))
         connection = await capnp.AsyncIoStream.create_connection(sock=sock)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 5)
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 5)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+        except AttributeError:
+            pass
         client = capnp.TwoPartyClient(connection)
         cvse = client.bootstrap().cast_as(CVSE_capnp.Cvse)
-        self = CVSE_Client(host, port, connection, client, cvse)
+        self = CVSE_Client(host, port, connection, client, cvse, auth_key)
         return self
 
     async def reconnect(self):
